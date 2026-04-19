@@ -26,7 +26,13 @@ fn main() {
         id: "id1".to_string(),
     };
     add_document(&mut db, &doc_key, john);
-    println!("{:?}", db);
+    println!("Insert document: {:?}", db);
+
+    let result = get_document(&db, &doc_key);
+    println!("Get document: {:?}", result);
+
+    delete_document(&mut db, &doc_key);
+    println!("Delete document: {:?}", db);
 }
 
 fn add_document(
@@ -37,12 +43,11 @@ fn add_document(
     db.insert(key.clone(), value);
 }
 
-fn get_document(
-    db: &mut HashMap<DocumentKey, serde_json::Value>,
+fn get_document<'a>(
+    db: &'a HashMap<DocumentKey, serde_json::Value>,
     key: &DocumentKey,
-) -> Option<serde_json::Value> {
-    let val = db.get(key);
-    val.cloned()
+) -> Option<&'a serde_json::Value> {
+    db.get(key)
 }
 
 fn delete_document(db: &mut HashMap<DocumentKey, serde_json::Value>, key: &DocumentKey) {
