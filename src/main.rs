@@ -40,14 +40,23 @@ impl Database {
             .read(true)
             .open("db.log")
             .unwrap(); // consider removing this unwrap if this is bad practice
-        let map: HashMap<DocumentKey, serde_json::Value> = HashMap::new();
+        let mut map: HashMap<DocumentKey, serde_json::Value> = HashMap::new();
 
-        // let reader = BufReader::new(&db_file);
-        // for line in reader.lines() {
-        //     let line = line.unwrap(); // potentially fix unwrap
-        //     let parts: Vec<&str> = line.split(':').collect();
-        //     println!("{:?}", parts);
-        // }
+        let reader = BufReader::new(&db_file);
+        for line in reader.lines() {
+            let line = line.unwrap(); // potentially fix unwrap
+            let entry: LogEntry = serde_json::from_str(&line).unwrap();
+            match entry {
+                LogEntry::Add { key, value } => {
+                    map.insert(key, value);
+                }
+                LogEntry::Delete { key } => {
+                    map.remove(&key);
+                }
+            }
+        }
+        println!("hashmap");
+        println!("{:?}", map);
 
         Database {
             documents: map,
@@ -96,7 +105,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     Database::get_document(&mut db, &doc_key);
 
-    Database::delete_document(&mut db, &doc_key);
+    // Database::delete_document(&mut db, &doc_key);
 
     Ok(())
 }
