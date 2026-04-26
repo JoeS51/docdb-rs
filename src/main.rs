@@ -88,6 +88,17 @@ impl Database {
         db.commit_log.write_all(b"\n").unwrap();
         db.commit_log.flush().unwrap();
     }
+
+    fn scan_collection<'a>(
+        db: &'a Self,
+        partition_key: &str,
+        collection: &str,
+    ) -> Vec<(&'a DocumentKey, &'a serde_json::Value)> {
+        db.documents
+            .iter()
+            .filter(|(k, _)| k.partition_key == partition_key && k.collection == collection)
+            .collect()
+    }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -159,5 +170,32 @@ mod tests {
         Database::delete_document(&mut test_db, &doc_key);
         let get_result = Database::get_document(&mut test_db, &doc_key);
         assert_eq!(None, get_result);
+    }
+
+    #[test]
+    fn test_scan_collection() {
+        let val = json!({
+            "name": "John Doe",
+            "age": 43,
+        });
+        let val2 = json!({
+            "name": "Joe Sluis",
+            "age": 22,
+        });
+        let doc_key = DocumentKey {
+            partition_key: "partition1".to_string(),
+            collection: "collection1".to_string(),
+            id: "id1".to_string(),
+        };
+        let doc_key2 = DocumentKey {
+            partition_key: "partition1".to_string(),
+            collection: "collection1".to_string(),
+            id: "id2".to_string(),
+        };
+        let mut test_db = Database::open(Path::new("test_scan.log")).unwrap();
+        Database::add_document(&mut test_db, &doc_key, &val);
+        Database::add_document(&mut test_db, &doc_key2, &val2);
+        let scan_result = Database::scan_collection(&test_db, "partition1", "collection1");
+        assert_eq!(vec![(&doc_key, &val), (&doc_key2, &val2)], scan_result);
     }
 }
