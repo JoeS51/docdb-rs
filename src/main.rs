@@ -8,6 +8,7 @@ use std::fs::OpenOptions;
 use std::fs::{self, File};
 use std::io;
 use std::io::{BufRead, BufReader, BufWriter, Seek, SeekFrom, Write};
+use std::path::Path;
 
 #[derive(Eq, Hash, PartialEq, Debug, Clone, Serialize, Deserialize)]
 struct DocumentKey {
@@ -33,19 +34,18 @@ struct Database {
 }
 
 impl Database {
-    fn from() -> Self {
+    fn open(path: impl AsRef<Path>) -> Result<Self, Box<dyn Error>> {
         let db_file = OpenOptions::new()
             .create(true)
             .append(true)
             .read(true)
-            .open("db.log")
-            .unwrap(); // consider removing this unwrap if this is bad practice
+            .open(path.as_ref())?;
         let mut map: HashMap<DocumentKey, serde_json::Value> = HashMap::new();
 
         let reader = BufReader::new(&db_file);
         for line in reader.lines() {
-            let line = line.unwrap(); // potentially fix unwrap
-            let entry: LogEntry = serde_json::from_str(&line).unwrap();
+            let line = line?;
+            let entry: LogEntry = serde_json::from_str(&line)?;
             match entry {
                 LogEntry::Add { key, value } => {
                     map.insert(key, value);
@@ -58,10 +58,10 @@ impl Database {
         println!("hashmap");
         println!("{:?}", map);
 
-        Database {
+        Ok(Database {
             documents: map,
             commit_log: db_file,
-        }
+        })
     }
 
     fn add_document(db: &mut Self, key: &DocumentKey, value: &serde_json::Value) {
@@ -91,7 +91,7 @@ impl Database {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut db = Database::from();
+    let mut db = Database::open(Path::new("db.log"))?;
     let john = json!({
         "name": "John Doe",
         "age": 43,
@@ -125,7 +125,7 @@ mod tests {
             collection: "collection1".to_string(),
             id: "id1".to_string(),
         };
-        let mut test_db = Database::from();
+        let mut test_db = Database::open(Path::new("test_get.log")).unwrap();
         Database::add_document(&mut test_db, &doc_key, &val);
         let get_result = Database::get_document(&mut test_db, &doc_key);
         assert_eq!(&val, get_result.unwrap());
@@ -138,7 +138,7 @@ mod tests {
             collection: "collection1".to_string(),
             id: "id1".to_string(),
         };
-        let mut test_db = Database::from();
+        let mut test_db = Database::open(Path::new("test_missing.log")).unwrap();
         let get_result = Database::get_document(&mut test_db, &doc_key);
         assert_eq!(None, get_result);
     }
@@ -154,7 +154,7 @@ mod tests {
             collection: "collection1".to_string(),
             id: "id1".to_string(),
         };
-        let mut test_db = Database::from();
+        let mut test_db = Database::open(Path::new("test_delete.log")).unwrap();
         Database::add_document(&mut test_db, &doc_key, &val);
         Database::delete_document(&mut test_db, &doc_key);
         let get_result = Database::get_document(&mut test_db, &doc_key);
