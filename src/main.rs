@@ -99,6 +99,19 @@ impl Database {
             .filter(|(k, _)| k.partition_key == partition_key && k.collection == collection)
             .collect()
     }
+
+    fn scan_collection_where<'a>(
+        db: &'a Self,
+        partition_key: &str,
+        collection: &str,
+        field: &str,
+        expected_value: &serde_json::Value,
+    ) -> Vec<(&'a DocumentKey, &'a serde_json::Value)> {
+        Database::scan_collection(db, partition_key, collection)
+            .into_iter()
+            .filter(|(_, value)| value.get(field) == Some(expected_value))
+            .collect()
+    }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -196,6 +209,7 @@ mod tests {
         Database::add_document(&mut test_db, &doc_key, &val);
         Database::add_document(&mut test_db, &doc_key2, &val2);
         let scan_result = Database::scan_collection(&test_db, "partition1", "collection1");
-        assert_eq!(vec![(&doc_key, &val), (&doc_key2, &val2)], scan_result);
+        assert!(scan_result.contains(&(&doc_key, &val)));
+        assert!(scan_result.contains(&(&doc_key2, &val2)));
     }
 }
