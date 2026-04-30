@@ -33,6 +33,17 @@ struct Database {
     commit_log: File,
 }
 
+struct Query {
+    partition_key: String,
+    collection: String,
+    filter: Option<FieldFilter>,
+}
+
+struct FieldFilter {
+    field: String,
+    value: serde_json::Value,
+}
+
 impl Database {
     fn open(path: impl AsRef<Path>) -> Result<Self, Box<dyn Error>> {
         let db_file = OpenOptions::new()
@@ -111,6 +122,26 @@ impl Database {
             .into_iter()
             .filter(|(_, value)| value.get(field) == Some(expected_value))
             .collect()
+    }
+
+    fn execute_query<'a>(
+        db: &'a Self,
+        query: &Query,
+    ) -> Vec<(&'a DocumentKey, &'a serde_json::Value)> {
+        let res: Vec<(&'a DocumentKey, &'a serde_json::Value)> = db
+            .documents
+            .iter()
+            .filter(|(k, _)| {
+                k.partition_key == query.partition_key && k.collection == query.collection
+            })
+            .collect();
+        if let Some(field_filter) = &query.filter {
+            res.into_iter()
+                .filter(|(_, value)| value.get(&field_filter.field) == Some(&field_filter.value))
+                .collect()
+        } else {
+            res
+        }
     }
 }
 
