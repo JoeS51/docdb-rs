@@ -1,0 +1,8 @@
+{"Add":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"},"value":{"age":43,"name":"John Doe"}}}
+{"Add":{"key":{"partition_key":"partition1","collection":"collection1","id":"id2"},"value":{"age":22,"name":"Joe Sluis"}}}
+{"Add":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"},"value":{"age":43,"name":"John Doe"}}}
+{"Add":{"key":{"partition_key":"partition1","collection":"collection1","id":"id2"},"value":{"age":22,"name":"Joe Sluis"}}}
+{"Add":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"},"value":{"age":43,"name":"John Doe"}}}
+{"Add":{"key":{"partition_key":"partition1","collection":"collection1","id":"id2"},"value":{"age":22,"name":"Joe Sluis"}}}
+{"Add":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"},"value":{"age":43,"name":"John Doe"}}}
+{"Add":{"key":{"partition_key":"partition1","collection":"collection1","id":"id2"},"value":{"age":22,"name":"Joe Sluis"}}}

@@ -243,4 +243,42 @@ mod tests {
         assert!(scan_result.contains(&(&doc_key, &val)));
         assert!(scan_result.contains(&(&doc_key2, &val2)));
     }
+
+    #[test]
+    fn test_execute_query() {
+        let val = json!({
+            "name": "John Doe",
+            "age": 43,
+        });
+        let val2 = json!({
+            "name": "Joe Sluis",
+            "age": 22,
+        });
+        let doc_key = DocumentKey {
+            partition_key: "partition1".to_string(),
+            collection: "collection1".to_string(),
+            id: "id1".to_string(),
+        };
+        let doc_key2 = DocumentKey {
+            partition_key: "partition1".to_string(),
+            collection: "collection1".to_string(),
+            id: "id2".to_string(),
+        };
+        let mut test_db = Database::open(Path::new("test_query.log")).unwrap();
+        Database::add_document(&mut test_db, &doc_key, &val);
+        Database::add_document(&mut test_db, &doc_key2, &val2);
+        let query_result = Database::execute_query(
+            &test_db,
+            &Query {
+                partition_key: "partition1".to_string(),
+                collection: "collection1".to_string(),
+                filter: Some(FieldFilter {
+                    field: "age".to_string(),
+                    value: json!(43),
+                }),
+            },
+        );
+        assert!(query_result.contains(&(&doc_key, &val)));
+        assert!(!query_result.contains(&(&doc_key2, &val2)));
+    }
 }

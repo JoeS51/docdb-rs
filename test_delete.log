@@ -10,3 +10,23 @@
 {"Delete":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"}}}
 {"Add":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"},"value":{"age":43,"name":"John Doe"}}}
 {"Delete":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"}}}
+{"Add":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"},"value":{"age":43,"name":"John Doe"}}}
+{"Delete":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"}}}
+{"Add":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"},"value":{"age":43,"name":"John Doe"}}}
+{"Delete":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"}}}
+{"Add":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"},"value":{"age":43,"name":"John Doe"}}}
+{"Delete":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"}}}
+{"Add":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"},"value":{"age":43,"name":"John Doe"}}}
+{"Delete":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"}}}
+{"Add":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"},"value":{"age":43,"name":"John Doe"}}}
+{"Delete":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"}}}
+{"Add":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"},"value":{"age":43,"name":"John Doe"}}}
+{"Delete":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"}}}
+{"Add":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"},"value":{"age":43,"name":"John Doe"}}}
+{"Delete":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"}}}
+{"Add":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"},"value":{"age":43,"name":"John Doe"}}}
+{"Delete":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"}}}
+{"Add":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"},"value":{"age":43,"name":"John Doe"}}}
+{"Delete":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"}}}
+{"Add":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"},"value":{"age":43,"name":"John Doe"}}}
+{"Delete":{"key":{"partition_key":"partition1","collection":"collection1","id":"id1"}}}
