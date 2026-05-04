@@ -1,3 +1,4 @@
+use bson::{Document, doc};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use serde_json::json;
@@ -74,17 +75,17 @@ impl Database {
     }
 
     fn add_document(
-        db: &mut Self,
+        &mut self,
         key: &DocumentKey,
         value: &serde_json::Value,
     ) -> Result<(), Box<dyn Error>> {
         let key = key.clone();
         let value = value.clone();
-        db.documents.insert(key.clone(), value.clone());
+        self.documents.insert(key.clone(), value.clone());
         let log_entry = LogEntry::Add { key, value };
-        serde_json::to_writer(&mut db.commit_log, &log_entry)?;
-        db.commit_log.write_all(b"\n")?;
-        db.commit_log.flush()?;
+        serde_json::to_writer(&mut self.commit_log, &log_entry)?;
+        self.commit_log.write_all(b"\n")?;
+        self.commit_log.flush()?;
         Ok(())
     }
 
@@ -92,46 +93,43 @@ impl Database {
         self.documents.get(key)
     }
 
-    fn delete_document(db: &mut Self, key: &DocumentKey) -> Result<(), Box<dyn Error>> {
+    fn delete_document(&mut self, key: &DocumentKey) -> Result<(), Box<dyn Error>> {
         let key = key.clone();
-        db.documents.remove(&key);
+        self.documents.remove(&key);
         let log_entry = LogEntry::Delete { key: key };
         // TODO: get rid of unwrap
-        serde_json::to_writer(&mut db.commit_log, &log_entry)?;
-        db.commit_log.write_all(b"\n")?;
-        db.commit_log.flush()?;
+        serde_json::to_writer(&mut self.commit_log, &log_entry)?;
+        self.commit_log.write_all(b"\n")?;
+        self.commit_log.flush()?;
         Ok(())
     }
 
-    fn scan_collection<'a>(
-        db: &'a Self,
+    fn scan_collection(
+        &self,
         partition_key: &str,
         collection: &str,
-    ) -> Vec<(&'a DocumentKey, &'a serde_json::Value)> {
-        db.documents
+    ) -> Vec<(&DocumentKey, &serde_json::Value)> {
+        self.documents
             .iter()
             .filter(|(k, _)| k.partition_key == partition_key && k.collection == collection)
             .collect()
     }
 
-    fn scan_collection_where<'a>(
-        db: &'a Self,
+    fn scan_collection_where(
+        &self,
         partition_key: &str,
         collection: &str,
         field: &str,
         expected_value: &serde_json::Value,
-    ) -> Vec<(&'a DocumentKey, &'a serde_json::Value)> {
-        Database::scan_collection(db, partition_key, collection)
+    ) -> Vec<(&DocumentKey, &serde_json::Value)> {
+        self.scan_collection(partition_key, collection)
             .into_iter()
             .filter(|(_, value)| value.get(field) == Some(expected_value))
             .collect()
     }
 
-    fn execute_query<'a>(
-        db: &'a Self,
-        query: &Query,
-    ) -> Vec<(&'a DocumentKey, &'a serde_json::Value)> {
-        let res: Vec<(&'a DocumentKey, &'a serde_json::Value)> = db
+    fn execute_query(&self, query: &Query) -> Vec<(&DocumentKey, &serde_json::Value)> {
+        let res: Vec<(&DocumentKey, &serde_json::Value)> = self
             .documents
             .iter()
             .filter(|(k, _)| {
@@ -159,7 +157,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         collection: "collection1".to_string(),
         id: "id1".to_string(),
     };
-    Database::add_document(&mut db, &doc_key, &john)?;
+    db.add_document(&doc_key, &john)?;
 
     db.get_document(&doc_key);
 
@@ -185,7 +183,7 @@ mod tests {
             collection: "collection1".to_string(),
             id: "id1".to_string(),
         };
-        Database::add_document(&mut test_db, &doc_key, &val).unwrap();
+        test_db.add_document(&doc_key, &val).unwrap();
         let get_result = test_db.get_document(&doc_key);
         assert_eq!(&val, get_result.unwrap());
     }
@@ -220,8 +218,8 @@ mod tests {
             collection: "collection1".to_string(),
             id: "id1".to_string(),
         };
-        Database::add_document(&mut test_db, &doc_key, &val).unwrap();
-        Database::delete_document(&mut test_db, &doc_key).unwrap();
+        test_db.add_document(&doc_key, &val).unwrap();
+        test_db.delete_document(&doc_key).unwrap();
         let get_result = test_db.get_document(&doc_key);
         assert_eq!(None, get_result);
     }
@@ -250,9 +248,9 @@ mod tests {
             collection: "collection1".to_string(),
             id: "id2".to_string(),
         };
-        Database::add_document(&mut test_db, &doc_key, &val).unwrap();
-        Database::add_document(&mut test_db, &doc_key2, &val2).unwrap();
-        let scan_result = Database::scan_collection(&test_db, "partition1", "collection1");
+        test_db.add_document(&doc_key, &val).unwrap();
+        test_db.add_document(&doc_key2, &val2).unwrap();
+        let scan_result = test_db.scan_collection("partition1", "collection1");
         assert!(scan_result.contains(&(&doc_key, &val)));
         assert!(scan_result.contains(&(&doc_key2, &val2)));
     }
@@ -281,20 +279,17 @@ mod tests {
             collection: "collection1".to_string(),
             id: "id2".to_string(),
         };
-        Database::add_document(&mut test_db, &doc_key, &val).unwrap();
-        Database::add_document(&mut test_db, &doc_key2, &val2).unwrap();
+        test_db.add_document(&doc_key, &val).unwrap();
+        test_db.add_document(&doc_key2, &val2).unwrap();
 
-        let query_result = Database::execute_query(
-            &test_db,
-            &Query {
-                partition_key: "partition1".to_string(),
-                collection: "collection1".to_string(),
-                filter: Some(FieldFilter {
-                    field: "age".to_string(),
-                    value: json!(43),
-                }),
-            },
-        );
+        let query_result = test_db.execute_query(&Query {
+            partition_key: "partition1".to_string(),
+            collection: "collection1".to_string(),
+            filter: Some(FieldFilter {
+                field: "age".to_string(),
+                value: json!(43),
+            }),
+        });
         assert!(query_result.contains(&(&doc_key, &val)));
         assert!(!query_result.contains(&(&doc_key2, &val2)));
     }
@@ -325,17 +320,17 @@ mod tests {
         // open the database, add a document, and close the db
         {
             let mut test_db = Database::open(&db_path).unwrap();
-            Database::add_document(&mut test_db, &doc_key, &val).unwrap();
+            test_db.add_document(&doc_key, &val).unwrap();
         }
         {
             let mut test_db = Database::open(&db_path).unwrap();
-            Database::add_document(&mut test_db, &doc_key2, &val2).unwrap();
+            test_db.add_document(&doc_key2, &val2).unwrap();
         }
 
         let reopened_db = Database::open(&db_path).unwrap();
 
-        assert!(reopened_db.get_document(&doc_key).is_some());
-        assert!(reopened_db.get_document(&doc_key2).is_some());
+        assert_eq!(Some(&val), reopened_db.get_document(&doc_key));
+        assert_eq!(Some(&val2), reopened_db.get_document(&doc_key2));
     }
 
     #[test]
@@ -354,11 +349,11 @@ mod tests {
 
         {
             let mut test_db = Database::open(&db_path).unwrap();
-            Database::add_document(&mut test_db, &doc_key, &val).unwrap();
+            test_db.add_document(&doc_key, &val).unwrap();
         }
         {
             let mut test_db = Database::open(&db_path).unwrap();
-            Database::delete_document(&mut test_db, &doc_key).unwrap();
+            test_db.delete_document(&doc_key).unwrap();
         }
 
         let reopened_db = Database::open(&db_path).unwrap();
