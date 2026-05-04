@@ -75,29 +75,35 @@ impl Database {
         })
     }
 
-    fn add_document(db: &mut Self, key: &DocumentKey, value: &serde_json::Value) {
+    fn add_document(
+        db: &mut Self,
+        key: &DocumentKey,
+        value: &serde_json::Value,
+    ) -> Result<(), Box<dyn Error>> {
         let key = key.clone();
         let value = value.clone();
         db.documents.insert(key.clone(), value.clone());
         let log_entry = LogEntry::Add { key, value };
         // TODO: get rid of unwrap
-        serde_json::to_writer(&mut db.commit_log, &log_entry).unwrap();
-        db.commit_log.write_all(b"\n").unwrap();
-        db.commit_log.flush().unwrap();
+        serde_json::to_writer(&mut db.commit_log, &log_entry)?;
+        db.commit_log.write_all(b"\n")?;
+        db.commit_log.flush()?;
+        Ok(())
     }
 
-    fn get_document<'a>(db: &'a mut Self, key: &DocumentKey) -> Option<&'a serde_json::Value> {
-        db.documents.get(key)
+    fn get_document(&self, key: &DocumentKey) -> Option<&serde_json::Value> {
+        self.documents.get(key)
     }
 
-    fn delete_document(db: &mut Self, key: &DocumentKey) {
+    fn delete_document(db: &mut Self, key: &DocumentKey) -> Result<(), Box<dyn Error>> {
         let key = key.clone();
         db.documents.remove(&key);
         let log_entry = LogEntry::Delete { key: key };
         // TODO: get rid of unwrap
-        serde_json::to_writer(&mut db.commit_log, &log_entry).unwrap();
-        db.commit_log.write_all(b"\n").unwrap();
-        db.commit_log.flush().unwrap();
+        serde_json::to_writer(&mut db.commit_log, &log_entry)?;
+        db.commit_log.write_all(b"\n")?;
+        db.commit_log.flush()?;
+        Ok(())
     }
 
     fn scan_collection<'a>(
@@ -158,7 +164,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     Database::add_document(&mut db, &doc_key, &john);
 
-    Database::get_document(&mut db, &doc_key);
+    db.get_document(&doc_key);
 
     // Database::delete_document(&mut db, &doc_key);
 
@@ -182,7 +188,7 @@ mod tests {
         };
         let mut test_db = Database::open(Path::new("test_get.log")).unwrap();
         Database::add_document(&mut test_db, &doc_key, &val);
-        let get_result = Database::get_document(&mut test_db, &doc_key);
+        let get_result = test_db.get_document(&doc_key);
         assert_eq!(&val, get_result.unwrap());
     }
 
@@ -194,7 +200,7 @@ mod tests {
             id: "id1".to_string(),
         };
         let mut test_db = Database::open(Path::new("test_missing.log")).unwrap();
-        let get_result = Database::get_document(&mut test_db, &doc_key);
+        let get_result = test_db.get_document(&doc_key);
         assert_eq!(None, get_result);
     }
 
@@ -212,7 +218,7 @@ mod tests {
         let mut test_db = Database::open(Path::new("test_delete.log")).unwrap();
         Database::add_document(&mut test_db, &doc_key, &val);
         Database::delete_document(&mut test_db, &doc_key);
-        let get_result = Database::get_document(&mut test_db, &doc_key);
+        let get_result = test_db.get_document(&doc_key);
         assert_eq!(None, get_result);
     }
 
