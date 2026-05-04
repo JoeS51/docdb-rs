@@ -66,8 +66,6 @@ impl Database {
                 }
             }
         }
-        println!("hashmap");
-        println!("{:?}", map);
 
         Ok(Database {
             documents: map,
@@ -84,7 +82,6 @@ impl Database {
         let value = value.clone();
         db.documents.insert(key.clone(), value.clone());
         let log_entry = LogEntry::Add { key, value };
-        // TODO: get rid of unwrap
         serde_json::to_writer(&mut db.commit_log, &log_entry)?;
         db.commit_log.write_all(b"\n")?;
         db.commit_log.flush()?;
@@ -162,11 +159,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         collection: "collection1".to_string(),
         id: "id1".to_string(),
     };
-    Database::add_document(&mut db, &doc_key, &john);
+    Database::add_document(&mut db, &doc_key, &john)?;
 
     db.get_document(&doc_key);
-
-    // Database::delete_document(&mut db, &doc_key);
 
     Ok(())
 }
@@ -177,6 +172,10 @@ mod tests {
 
     #[test]
     fn test_get_document() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.log");
+        let mut test_db = Database::open(&db_path).unwrap();
+
         let val = json!({
             "name": "John Doe",
             "age": 43,
@@ -186,26 +185,32 @@ mod tests {
             collection: "collection1".to_string(),
             id: "id1".to_string(),
         };
-        let mut test_db = Database::open(Path::new("test_get.log")).unwrap();
-        Database::add_document(&mut test_db, &doc_key, &val);
+        Database::add_document(&mut test_db, &doc_key, &val).unwrap();
         let get_result = test_db.get_document(&doc_key);
         assert_eq!(&val, get_result.unwrap());
     }
 
     #[test]
     fn test_get_missing_document() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.log");
+        let test_db = Database::open(&db_path).unwrap();
+
         let doc_key = DocumentKey {
             partition_key: "partition1".to_string(),
             collection: "collection1".to_string(),
             id: "id1".to_string(),
         };
-        let mut test_db = Database::open(Path::new("test_missing.log")).unwrap();
         let get_result = test_db.get_document(&doc_key);
         assert_eq!(None, get_result);
     }
 
     #[test]
     fn test_delete_document() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.log");
+        let mut test_db = Database::open(&db_path).unwrap();
+
         let val = json!({
             "name": "John Doe",
             "age": 43,
@@ -215,15 +220,18 @@ mod tests {
             collection: "collection1".to_string(),
             id: "id1".to_string(),
         };
-        let mut test_db = Database::open(Path::new("test_delete.log")).unwrap();
-        Database::add_document(&mut test_db, &doc_key, &val);
-        Database::delete_document(&mut test_db, &doc_key);
+        Database::add_document(&mut test_db, &doc_key, &val).unwrap();
+        Database::delete_document(&mut test_db, &doc_key).unwrap();
         let get_result = test_db.get_document(&doc_key);
         assert_eq!(None, get_result);
     }
 
     #[test]
     fn test_scan_collection() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.log");
+        let mut test_db = Database::open(&db_path).unwrap();
+
         let val = json!({
             "name": "John Doe",
             "age": 43,
@@ -242,9 +250,8 @@ mod tests {
             collection: "collection1".to_string(),
             id: "id2".to_string(),
         };
-        let mut test_db = Database::open(Path::new("test_scan.log")).unwrap();
-        Database::add_document(&mut test_db, &doc_key, &val);
-        Database::add_document(&mut test_db, &doc_key2, &val2);
+        Database::add_document(&mut test_db, &doc_key, &val).unwrap();
+        Database::add_document(&mut test_db, &doc_key2, &val2).unwrap();
         let scan_result = Database::scan_collection(&test_db, "partition1", "collection1");
         assert!(scan_result.contains(&(&doc_key, &val)));
         assert!(scan_result.contains(&(&doc_key2, &val2)));
@@ -252,6 +259,10 @@ mod tests {
 
     #[test]
     fn test_execute_query() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.log");
+        let mut test_db = Database::open(&db_path).unwrap();
+
         let val = json!({
             "name": "John Doe",
             "age": 43,
@@ -270,9 +281,9 @@ mod tests {
             collection: "collection1".to_string(),
             id: "id2".to_string(),
         };
-        let mut test_db = Database::open(Path::new("test_query.log")).unwrap();
-        Database::add_document(&mut test_db, &doc_key, &val);
-        Database::add_document(&mut test_db, &doc_key2, &val2);
+        Database::add_document(&mut test_db, &doc_key, &val).unwrap();
+        Database::add_document(&mut test_db, &doc_key2, &val2).unwrap();
+
         let query_result = Database::execute_query(
             &test_db,
             &Query {
@@ -286,5 +297,72 @@ mod tests {
         );
         assert!(query_result.contains(&(&doc_key, &val)));
         assert!(!query_result.contains(&(&doc_key2, &val2)));
+    }
+
+    #[test]
+    fn test_reopen_keeps_document() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.log");
+        let val = json!({
+            "name": "John Doe",
+            "age": 43,
+        });
+        let doc_key = DocumentKey {
+            partition_key: "partition1".to_string(),
+            collection: "collection1".to_string(),
+            id: "id1".to_string(),
+        };
+        let val2 = json!({
+            "name": "Joe Sluis",
+            "age": 22,
+        });
+        let doc_key2 = DocumentKey {
+            partition_key: "partition1".to_string(),
+            collection: "collection1".to_string(),
+            id: "id2".to_string(),
+        };
+
+        // open the database, add a document, and close the db
+        {
+            let mut test_db = Database::open(&db_path).unwrap();
+            Database::add_document(&mut test_db, &doc_key, &val).unwrap();
+        }
+        {
+            let mut test_db = Database::open(&db_path).unwrap();
+            Database::add_document(&mut test_db, &doc_key2, &val2).unwrap();
+        }
+
+        let reopened_db = Database::open(&db_path).unwrap();
+
+        assert!(reopened_db.get_document(&doc_key).is_some());
+        assert!(reopened_db.get_document(&doc_key2).is_some());
+    }
+
+    #[test]
+    fn test_reopen_keeps_delete() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.log");
+        let val = json!({
+            "name": "John Doe",
+            "age": 43,
+        });
+        let doc_key = DocumentKey {
+            partition_key: "partition1".to_string(),
+            collection: "collection1".to_string(),
+            id: "id1".to_string(),
+        };
+
+        {
+            let mut test_db = Database::open(&db_path).unwrap();
+            Database::add_document(&mut test_db, &doc_key, &val).unwrap();
+        }
+        {
+            let mut test_db = Database::open(&db_path).unwrap();
+            Database::delete_document(&mut test_db, &doc_key).unwrap();
+        }
+
+        let reopened_db = Database::open(&db_path).unwrap();
+
+        assert!(reopened_db.get_document(&doc_key).is_none());
     }
 }
