@@ -1,5 +1,5 @@
 pub mod memory;
-
+pub mod lsm;
 
 #[derive(Debug)]
 pub enum StorageError {
