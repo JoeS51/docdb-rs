@@ -1,9 +1,5 @@
 pub mod lsm;
 pub mod memory;
-<<<<<<< HEAD
-pub mod lsm;
-=======
->>>>>>> 9170c425d9abd9cd11f65c7c01682ee17a22cba1
 
 #[derive(Debug)]
 pub enum StorageError {
