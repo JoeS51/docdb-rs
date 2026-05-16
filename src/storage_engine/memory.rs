@@ -22,8 +22,8 @@ impl StorageEngine for MemoryStorage {
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, StorageError> {
         Ok(self.map.get(key).cloned())
     }
-    fn delete(&mut self, key: &[u8]) -> Result<(), StorageError> {
-        self.map.remove(key);
+    fn delete(&mut self, key: Vec<u8>) -> Result<(), StorageError> {
+        self.map.remove(&key);
         Ok(())
     }
 }
@@ -43,7 +43,7 @@ mod tests {
     fn put_then_delete_returns_none() {
         let mut storage = MemoryStorage::new();
         storage.put(b"hello".to_vec(), b"world".to_vec()).unwrap();
-        storage.delete(b"hello").unwrap();
+        storage.delete(b"hello".to_vec()).unwrap();
         assert_eq!(storage.get(b"hello").unwrap(), None);
     }
 

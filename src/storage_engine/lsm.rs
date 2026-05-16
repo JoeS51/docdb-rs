@@ -1,8 +1,12 @@
 // LSM-based storage engine
 use super::{StorageEngine, StorageError};
 use std::collections::BTreeMap;
+use std::error::Error;
 use std::fs::{self, File};
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
+
+const MEMTABLE_CAPACITY: usize = 2;
 
 #[derive(Debug, Clone)]
 enum ValueEntry {
@@ -31,12 +35,12 @@ impl LsmStorage {
         Self {
             mem_table: BTreeMap::new(),
             sstables: Vec::new(),
-            next_table_id: 0, // TODO: need to dynamically find latest sstable
+            next_table_id: 1, // TODO: need to dynamically find latest sstable
         }
     }
 
     pub fn create_next_sstable_path(&mut self) -> Result<PathBuf, StorageError> {
-        let path = Path::new("sstables").join(format!("{}.sst", self.next_table_id));
+        let path = Self::sstable_path_for_id(self.next_table_id);
         self.next_table_id += 1;
         Ok(path)
     }
@@ -62,11 +66,38 @@ impl LsmStorage {
     }
 
     pub fn is_full(&self) -> bool {
-        if self.mem_table.len() >= 2 {
+        if self.mem_table.len() >= MEMTABLE_CAPACITY {
             true
         } else {
             false
         }
+    }
+
+    pub fn search_sstable(
+        &self,
+        key: &[u8],
+        sstable_id: u64,
+    ) -> Result<Option<Vec<u8>>, StorageError> {
+        let path = Self::sstable_path_for_id(sstable_id);
+        let file = File::open(path).map_err(StorageError::Io)?;
+        let reader = BufReader::new(file);
+        for line in reader.lines() {
+            let line = line.map_err(StorageError::Io)?;
+            let parts: Vec<&str> = line.split(':').collect();
+            println!("line: {}", line);
+            println!("key: {:?}", key);
+            println!("parts 0: {:?}", parts[0].trim().as_bytes());
+            println!("parts 0: {:?}", parts[0]);
+            if parts.len() == 2 && parts[0].trim().as_bytes() == key {
+                println!("found: {}", parts[1]);
+                return Ok(Some(parts[1].to_string().into_bytes()));
+            }
+        }
+        Ok(None)
+    }
+
+    fn sstable_path_for_id(id: u64) -> PathBuf {
+        Path::new("sstables").join(format!("{}.sst", id))
     }
 }
 
@@ -79,14 +110,27 @@ impl StorageEngine for LsmStorage {
         Ok(())
     }
     fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, StorageError> {
-        Ok(match self.mem_table.get(key) {
-            Some(ValueEntry::Put(value)) => Some(value.clone()),
-            Some(ValueEntry::Tombstone) => None,
-            None => None,
-        })
+        if let Some(entry) = self.mem_table.get(key) {
+            match entry {
+                ValueEntry::Put(value) => return Ok(Some(value.clone())),
+                ValueEntry::Tombstone => return Ok(None),
+            }
+        } else {
+            // Search sstables since key wasn't in memtable
+            let mut curr_table_id = self.next_table_id - 1;
+            while curr_table_id > 0 {
+                println!("iterating down");
+                let res = self.search_sstable(key, curr_table_id)?;
+                if let Some(value) = res {
+                    return Ok(Some(value));
+                }
+                curr_table_id -= 1;
+            }
+            return Ok(None);
+        }
     }
-    fn delete(&mut self, key: &[u8]) -> Result<(), StorageError> {
-        self.mem_table.remove(key);
+    fn delete(&mut self, key: Vec<u8>) -> Result<(), StorageError> {
+        self.mem_table.insert(key, ValueEntry::Tombstone);
         Ok(())
     }
 }
@@ -98,9 +142,22 @@ mod tests {
     #[test]
     fn put_then_get_returns_value() {
         let mut storage = LsmStorage::new();
-        storage.put(b"hello".to_vec(), b"world".to_vec()).unwrap();
-        storage.put(b"test".to_vec(), b"world".to_vec()).unwrap();
-        storage.put(b"test2".to_vec(), b"world".to_vec()).unwrap();
-        assert_eq!(storage.get(b"hello").unwrap(), Some(b"world".to_vec()));
+        storage
+            .put(b"sstable1".to_vec(), b"world".to_vec())
+            .unwrap();
+        storage
+            .put(b"sstable1.1".to_vec(), b"sstable1.1".to_vec())
+            .unwrap();
+        // storage
+        //     .put(b"sstable2".to_vec(), b"world".to_vec())
+        //     .unwrap();
+        // storage
+        //     .put(b"sstable2.1".to_vec(), b"world".to_vec())
+        //     .unwrap();
+        storage
+            .put(b"sstable3".to_vec(), b"world".to_vec())
+            .unwrap();
+        assert_eq!(storage.get(b"sstable3").unwrap(), Some(b"world".to_vec()));
+        assert_eq!(storage.get(b"sstable1").unwrap(), Some(b"world".to_vec()));
     }
 }
