@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 
 const MEMTABLE_CAPACITY: usize = 2;
@@ -55,13 +55,23 @@ impl LsmStorage {
     pub fn flush_memtable(&mut self) -> Result<(), StorageError> {
         // Flushes memtable after it reaches some capacity threshold
         let path = self.add_sstable()?;
+        let entries: Vec<_> = self.mem_table.clone().into_iter().collect();
+        let json = serde_json::to_string_pretty(&entries);
+        println!("FLUSH MEMTABLE");
+        println!("{:?}", json);
         let content = self
             .mem_table
             .iter()
             .map(|(k, v)| format!("{:?}: {:?}", k, v))
             .collect::<Vec<_>>()
             .join("\n");
-        fs::write(&path, content).unwrap();
+
+        // fs::write(&path, content).unwrap();
+        let file = File::create(path).unwrap();
+        let writer = BufWriter::new(file);
+        serde_json::to_writer(writer, &entries).unwrap();
+        // fs::write(&path, json).unwrap();
+        // serde_json::to_writer(&mut self.commit_log, &log_entry)?;
         self.mem_table.clear();
         Ok(())
     }
