@@ -1,5 +1,6 @@
 // LSM-based storage engine
 use super::{StorageEngine, StorageError};
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::fs::{self, File};
@@ -8,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 const MEMTABLE_CAPACITY: usize = 2;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 enum ValueEntry {
     Put(Vec<u8>),
     Tombstone,
@@ -84,12 +85,7 @@ impl LsmStorage {
         for line in reader.lines() {
             let line = line.map_err(StorageError::Io)?;
             let parts: Vec<&str> = line.split(':').collect();
-            println!("line: {}", line);
-            println!("key: {:?}", key);
-            println!("parts 0: {:?}", parts[0].trim().as_bytes());
-            println!("parts 0: {:?}", parts[0]);
             if parts.len() == 2 && parts[0].trim().as_bytes() == key {
-                println!("found: {}", parts[1]);
                 return Ok(Some(parts[1].to_string().into_bytes()));
             }
         }
