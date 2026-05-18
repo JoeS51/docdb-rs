@@ -1,6 +1,7 @@
 // LSM-based storage engine
 use super::{StorageEngine, StorageError};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::fs::{self, File};
@@ -13,6 +14,12 @@ const MEMTABLE_CAPACITY: usize = 2;
 enum ValueEntry {
     Put(Vec<u8>),
     Tombstone,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct SsTableRecord {
+    key: Vec<u8>,
+    entry: ValueEntry,
 }
 
 struct Sstable {
@@ -54,23 +61,30 @@ impl LsmStorage {
 
     pub fn flush_memtable(&mut self) -> Result<(), StorageError> {
         // Flushes memtable after it reaches some capacity threshold
+        let mut out = String::new();
+        for (k, v) in &self.mem_table {
+            let curr_record = SsTableRecord {
+                key: k.clone(),
+                entry: v.clone(),
+            };
+            let line = serde_json::to_string(&curr_record)
+                .map_err(|e| StorageError::Io(std::io::Error::other(e)))?;
+            out.push_str(&line);
+            out.push('\n');
+        }
         let path = self.add_sstable()?;
-        let entries: Vec<_> = self.mem_table.clone().into_iter().collect();
-        let json = serde_json::to_string_pretty(&entries);
-        println!("FLUSH MEMTABLE");
-        println!("{:?}", json);
-        let content = self
-            .mem_table
-            .iter()
-            .map(|(k, v)| format!("{:?}: {:?}", k, v))
-            .collect::<Vec<_>>()
-            .join("\n");
+        // let content = self
+        //     .mem_table
+        //     .iter()
+        //     .map(|(k, v)| format!("{:?}: {:?}", k, v))
+        //     .collect::<Vec<_>>()
+        //     .join("\n");
 
         // fs::write(&path, content).unwrap();
-        let file = File::create(path).unwrap();
-        let writer = BufWriter::new(file);
-        serde_json::to_writer(writer, &entries).unwrap();
-        // fs::write(&path, json).unwrap();
+        // let file = File::create(path).unwrap();
+        // let writer = BufWriter::new(file);
+        // serde_json::to_writer(writer, &entries).unwrap();
+        fs::write(&path, out).unwrap();
         // serde_json::to_writer(&mut self.commit_log, &log_entry)?;
         self.mem_table.clear();
         Ok(())
@@ -94,9 +108,13 @@ impl LsmStorage {
         let reader = BufReader::new(file);
         for line in reader.lines() {
             let line = line.map_err(StorageError::Io)?;
-            let parts: Vec<&str> = line.split(':').collect();
-            if parts.len() == 2 && parts[0].trim().as_bytes() == key {
-                return Ok(Some(parts[1].to_string().into_bytes()));
+            let record: SsTableRecord = serde_json::from_str(&line)
+                .map_err(|e| StorageError::Io(std::io::Error::other(e)))?;
+            if record.key == key {
+                return match record.entry {
+                    ValueEntry::Put(value) => Ok(Some(value)),
+                    ValueEntry::Tombstone => Ok(None),
+                };
             }
         }
         Ok(None)
@@ -154,16 +172,17 @@ mod tests {
         storage
             .put(b"sstable1.1".to_vec(), b"sstable1.1".to_vec())
             .unwrap();
-        // storage
-        //     .put(b"sstable2".to_vec(), b"world".to_vec())
-        //     .unwrap();
-        // storage
-        //     .put(b"sstable2.1".to_vec(), b"world".to_vec())
-        //     .unwrap();
+        storage
+            .put(b"sstable2".to_vec(), b"world".to_vec())
+            .unwrap();
+        storage
+            .put(b"sstable2.1".to_vec(), b"world".to_vec())
+            .unwrap();
         storage
             .put(b"sstable3".to_vec(), b"world".to_vec())
             .unwrap();
         assert_eq!(storage.get(b"sstable3").unwrap(), Some(b"world".to_vec()));
         assert_eq!(storage.get(b"sstable1").unwrap(), Some(b"world".to_vec()));
+        assert_eq!(storage.get(b"sstable2.1").unwrap(), Some(b"world".to_vec()));
     }
 }
