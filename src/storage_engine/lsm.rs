@@ -5,13 +5,13 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader, BufWriter};
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 const MEMTABLE_CAPACITY: usize = 2;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-enum ValueEntry {
+pub enum ValueEntry {
     Put(Vec<u8>),
     Tombstone,
 }
@@ -30,6 +30,13 @@ pub struct LsmStorage {
     mem_table: BTreeMap<Vec<u8>, ValueEntry>,
     sstables: Vec<Sstable>,
     next_table_id: u64,
+    wal_handle: File,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub enum WalEntry {
+    Put { key: Vec<u8>, value: ValueEntry },
+    Delete { key: Vec<u8> },
 }
 
 impl Sstable {
@@ -40,10 +47,16 @@ impl Sstable {
 
 impl LsmStorage {
     pub fn new() -> Self {
+        let wal_file = File::options()
+            .append(true)
+            .read(true)
+            .open("wal.log")
+            .unwrap();
         Self {
             mem_table: BTreeMap::new(),
             sstables: Vec::new(),
             next_table_id: 1, // TODO: need to dynamically find latest sstable
+            wal_handle: wal_file,
         }
     }
 
@@ -127,6 +140,18 @@ impl LsmStorage {
 
 impl StorageEngine for LsmStorage {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<(), StorageError> {
+        let mut out = String::new();
+        let wal_entry = WalEntry::Put {
+            key: key.clone(),
+            value: ValueEntry::Put(value.clone()),
+        };
+        let wal_entry_serialized = serde_json::to_string(&wal_entry)
+            .map_err(|e| StorageError::Io(std::io::Error::other(e)))?;
+        out.push_str(&wal_entry_serialized);
+        out.push('\n');
+        self.wal_handle
+            .write_all(out.as_bytes())
+            .map_err(StorageError::Io)?;
         if self.is_full() {
             self.flush_memtable()?;
         }
@@ -154,6 +179,15 @@ impl StorageEngine for LsmStorage {
         }
     }
     fn delete(&mut self, key: Vec<u8>) -> Result<(), StorageError> {
+        let mut out = String::new();
+        let wal_entry = WalEntry::Delete { key: key.clone() };
+        let wal_entry_serialized = serde_json::to_string(&wal_entry)
+            .map_err(|e| StorageError::Io(std::io::Error::other(e)))?;
+        out.push_str(&wal_entry_serialized);
+        out.push('\n');
+        self.wal_handle
+            .write_all(out.as_bytes())
+            .map_err(StorageError::Io)?;
         self.mem_table.insert(key, ValueEntry::Tombstone);
         Ok(())
     }
@@ -181,6 +215,7 @@ mod tests {
         storage
             .put(b"sstable3".to_vec(), b"world".to_vec())
             .unwrap();
+        storage.delete(b"sstable3".to_vec()).unwrap();
         assert_eq!(storage.get(b"sstable3").unwrap(), Some(b"world".to_vec()));
         assert_eq!(storage.get(b"sstable1").unwrap(), Some(b"world".to_vec()));
         assert_eq!(storage.get(b"sstable2.1").unwrap(), Some(b"world".to_vec()));
