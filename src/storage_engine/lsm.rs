@@ -4,11 +4,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::error::Error;
-use std::fs::{self, File};
+use std::fs::{self, DirEntry, File};
 use std::io::{BufRead, BufReader, BufWriter, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 const MEMTABLE_CAPACITY: usize = 2;
+const SSTABLE_PATH: &str = "sstables";
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum ValueEntry {
@@ -22,8 +23,13 @@ struct SsTableRecord {
     entry: ValueEntry,
 }
 
+#[derive(Debug)]
 struct Sstable {
+    id: u64,
     file_path: PathBuf,
+    min_key: Vec<u8>,
+    max_key: Vec<u8>,
+    entry_count: u64,
 }
 
 pub struct LsmStorage {
@@ -40,8 +46,14 @@ pub enum WalEntry {
 }
 
 impl Sstable {
-    pub fn new(fp: PathBuf) -> Self {
-        Self { file_path: fp }
+    pub fn new(id: u64, fp: PathBuf, min_key: Vec<u8>, max_key: Vec<u8>, entry_count: u64) -> Self {
+        Self {
+            id,
+            file_path: fp,
+            min_key,
+            max_key,
+            entry_count,
+        }
     }
 }
 
@@ -69,7 +81,13 @@ impl LsmStorage {
 
     pub fn add_sstable(&mut self) -> Result<PathBuf, StorageError> {
         let path = self.create_next_sstable_path()?;
-        self.sstables.push(Sstable::new(path.clone()));
+        self.sstables.push(Sstable::new(
+            self.next_table_id,
+            path.clone(),
+            Vec::new(),
+            Vec::new(),
+            0,
+        ));
         Ok(path)
     }
 
@@ -135,7 +153,7 @@ impl LsmStorage {
     }
 
     fn sstable_path_for_id(id: u64) -> PathBuf {
-        Path::new("sstables").join(format!("{}.sst", id))
+        Path::new(SSTABLE_PATH).join(format!("{}.sst", id))
     }
 
     pub fn clear_wal(&mut self) -> Result<(), StorageError> {
@@ -169,9 +187,32 @@ impl LsmStorage {
                 }
             }
         }
-        println!("HEELLLO");
-        println!("{:?}", self.mem_table);
         Ok(())
+    }
+
+    pub fn init_sstables(&mut self) -> Result<Vec<Sstable>, StorageError> {
+        // iterate over all files in sstables folder
+        // id = from name, path = path, min_key = first entry, max_key = last entry, num_entries = # of lines in file
+        let entries =
+            fs::read_dir(SSTABLE_PATH).map_err(|e| StorageError::Io(std::io::Error::other(e)))?;
+        let mut sstables: Vec<Sstable> = Vec::new();
+        for sstable in entries {
+            let sstable = sstable.map_err(|e| StorageError::Io(std::io::Error::other(e)))?;
+            let id = sstable.file_name().to_string_lossy().replace(".sst", "");
+            let id = id.parse::<u64>().unwrap();
+            let path = sstable.path();
+            println!("SStable for loop");
+            println!("{id}");
+            // TODO: derive first and last entry and number of lines
+            sstables.push(Sstable {
+                id,
+                file_path: path,
+                min_key: Vec::new(),
+                max_key: Vec::new(),
+                entry_count: 0,
+            });
+        }
+        Ok(sstables)
     }
 }
 
@@ -240,7 +281,9 @@ mod tests {
     #[test]
     fn put_then_get_returns_value() {
         let mut storage = LsmStorage::new();
-        storage.replay_wal().unwrap();
+        storage.replay_wal().unwrap(); // TODO: clean this up
+        storage.sstables = storage.init_sstables().unwrap();
+        println!("{:?}", storage.sstables);
         storage
             .put(b"sstable1".to_vec(), b"world".to_vec())
             .unwrap();
