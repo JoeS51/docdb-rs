@@ -5,7 +5,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::io::{BufRead, BufReader, BufWriter, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 const MEMTABLE_CAPACITY: usize = 2;
@@ -48,8 +48,9 @@ impl Sstable {
 impl LsmStorage {
     pub fn new() -> Self {
         let wal_file = File::options()
-            .append(true)
+            .create(true)
             .read(true)
+            .write(true)
             .open("wal.log")
             .unwrap();
         Self {
@@ -136,10 +137,51 @@ impl LsmStorage {
     fn sstable_path_for_id(id: u64) -> PathBuf {
         Path::new("sstables").join(format!("{}.sst", id))
     }
+
+    pub fn clear_wal(&mut self) -> Result<(), StorageError> {
+        let new_wal_file = File::options()
+            .create(true)
+            .read(true)
+            .write(true)
+            .truncate(true)
+            .open("wal.log")
+            .unwrap();
+        self.wal_handle = new_wal_file;
+        Ok(())
+    }
+
+    pub fn replay_wal(&mut self) -> Result<(), StorageError> {
+        // Read WAL at the program start up and fill memtable
+        self.wal_handle
+            .seek(SeekFrom::Start(0))
+            .map_err(StorageError::Io)?;
+        let reader = BufReader::new(&self.wal_handle);
+        for line in reader.lines() {
+            let line = line.map_err(StorageError::Io)?;
+            let wal_entry: WalEntry = serde_json::from_str(&line)
+                .map_err(|e| StorageError::Io(std::io::Error::other(e)))?;
+            match wal_entry {
+                WalEntry::Put { key, value } => {
+                    self.mem_table.insert(key, value);
+                }
+                WalEntry::Delete { key } => {
+                    self.mem_table.remove(&key);
+                }
+            }
+        }
+        println!("HEELLLO");
+        println!("{:?}", self.mem_table);
+        Ok(())
+    }
 }
 
 impl StorageEngine for LsmStorage {
     fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<(), StorageError> {
+        if self.is_full() {
+            self.flush_memtable()?;
+            println!("CLEARED");
+            self.clear_wal()?;
+        }
         let mut out = String::new();
         let wal_entry = WalEntry::Put {
             key: key.clone(),
@@ -152,9 +194,7 @@ impl StorageEngine for LsmStorage {
         self.wal_handle
             .write_all(out.as_bytes())
             .map_err(StorageError::Io)?;
-        if self.is_full() {
-            self.flush_memtable()?;
-        }
+        self.wal_handle.sync_data().map_err(StorageError::Io)?;
         self.mem_table.insert(key, ValueEntry::Put(value));
         Ok(())
     }
@@ -200,6 +240,7 @@ mod tests {
     #[test]
     fn put_then_get_returns_value() {
         let mut storage = LsmStorage::new();
+        storage.replay_wal().unwrap();
         storage
             .put(b"sstable1".to_vec(), b"world".to_vec())
             .unwrap();
@@ -215,7 +256,9 @@ mod tests {
         storage
             .put(b"sstable3".to_vec(), b"world".to_vec())
             .unwrap();
-        storage.delete(b"sstable3".to_vec()).unwrap();
+        storage
+            .put(b"sstable3.2".to_vec(), b"world".to_vec())
+            .unwrap();
         assert_eq!(storage.get(b"sstable3").unwrap(), Some(b"world".to_vec()));
         assert_eq!(storage.get(b"sstable1").unwrap(), Some(b"world".to_vec()));
         assert_eq!(storage.get(b"sstable2.1").unwrap(), Some(b"world".to_vec()));
