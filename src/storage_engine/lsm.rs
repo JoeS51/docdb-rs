@@ -202,7 +202,13 @@ impl LsmStorage {
             let id = id.parse::<u64>().unwrap();
             let path = sstable.path();
             println!("SStable for loop");
-            println!("{id}");
+            let mut file =
+                File::open(&path).map_err(|e| StorageError::Io(std::io::Error::other(e)))?;
+            file.seek(SeekFrom::Start(0)).map_err(StorageError::Io)?;
+            let reader = BufReader::new(file);
+            for (i, line) in reader.lines().enumerate() {
+                // TODO: find the first and last line
+            }
             // TODO: derive first and last entry and number of lines
             sstables.push(Sstable {
                 id,
