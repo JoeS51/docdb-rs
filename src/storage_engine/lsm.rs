@@ -8,7 +8,7 @@ use std::fs::{self, DirEntry, File};
 use std::io::{BufRead, BufReader, BufWriter, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
-const MEMTABLE_CAPACITY: usize = 2;
+const MEMTABLE_CAPACITY: usize = 10;
 const SSTABLE_PATH: &str = "sstables";
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -277,6 +277,9 @@ impl StorageEngine for LsmStorage {
             .map_err(StorageError::Io)?;
         self.mem_table.insert(key, ValueEntry::Tombstone);
         Ok(())
+    }
+    fn clear(&mut self) -> Result<(), StorageError> {
+        todo!();
     }
 }
 

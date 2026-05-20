@@ -1,4 +1,6 @@
 use bson::{Document, doc};
+use docdb_rs::storage_engine::StorageEngine;
+use docdb_rs::storage_engine::lsm::LsmStorage;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use serde_json::json;
@@ -147,20 +149,63 @@ impl Database {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut db = Database::open(Path::new("db.log"))?;
-    let john = json!({
-        "name": "John Doe",
-        "age": 43,
-    });
-    let doc_key = DocumentKey {
-        partition_key: "partition1".to_string(),
-        collection: "collection1".to_string(),
-        id: "id1".to_string(),
-    };
-    db.add_document(&doc_key, &john)?;
+    // cli operations:
+    // put <key> <value>
+    // get <key> <value>
+    // clear
+    // help
+    let mut lsm = LsmStorage::new();
+    loop {
+        println!("Enter DB operation");
+        let mut input = String::new();
+        io::stdin()
+            .read_line(&mut input)
+            .expect("failed to read input");
+        parse_cli_input(input, &mut lsm)?;
+    }
+    // let mut db = Database::open(Path::new("db.log"))?;
+    // let john = json!({
+    //     "name": "John Doe",
+    //     "age": 43,
+    // });
+    // let doc_key = DocumentKey {
+    //     partition_key: "partition1".to_string(),
+    //     collection: "collection1".to_string(),
+    //     id: "id1".to_string(),
+    // };
+    // db.add_document(&doc_key, &john)?;
 
-    db.get_document(&doc_key);
+    // db.get_document(&doc_key);
 
+    // Ok(())
+}
+
+fn parse_cli_input(input: String, db: &mut LsmStorage) -> Result<(), Box<dyn Error>> {
+    let vec: Vec<&str> = input.split_whitespace().collect();
+    match vec.as_slice() {
+        ["put", key, value] => {
+            db.put(key.as_bytes().to_vec(), value.as_bytes().to_vec())
+                .unwrap();
+            println!("PUT VALUE");
+        }
+        ["get", key] => {
+            let val = db.get(key.as_bytes()).unwrap();
+            println!("GOT VALUE {:?}", val);
+        }
+        ["clear"] => {
+            println!("CLEARED")
+        }
+        ["help"] => {
+            println!("------------");
+            println!("put <KEY> <VALUE>");
+            println!("get <KEY>");
+            println!("clear");
+            println!("------------");
+        }
+        _ => {
+            println!("invalid input");
+        }
+    }
     Ok(())
 }
 

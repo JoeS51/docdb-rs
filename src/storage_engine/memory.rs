@@ -26,6 +26,10 @@ impl StorageEngine for MemoryStorage {
         self.map.remove(&key);
         Ok(())
     }
+    fn clear(&mut self) -> Result<(), StorageError> {
+        self.map.clear();
+        Ok(())
+    }
 }
 
 #[cfg(test)]
